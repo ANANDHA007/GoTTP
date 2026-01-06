@@ -2,7 +2,9 @@ package main
 
 import (
 	"GoTTP/transport"
+	"fmt"
 	"log"
+	"net"
 )
 
 func main() {
@@ -11,5 +13,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	tcpListener.Start()
+	err1 := tcpListener.Start(func(conn net.Conn) {
+		defer conn.Close()
+		fmt.Println("Remote Connection Received:", conn.RemoteAddr())
+	})
+
+	if err1 != nil {
+		log.Fatal(err1)
+	}
 }
