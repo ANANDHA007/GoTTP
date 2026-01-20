@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"fmt"
 	"net"
 )
 
@@ -17,21 +16,22 @@ func NewTcpListener(tcp string) (*TcpListner, error) {
 	return &tcplistener, nil
 }
 
-func (tcp *TcpListner) Start() (bool, error) {
+func (tcp *TcpListner) Start(handler func(net.Conn)) error {
 
 	tcpln, err := net.Listen("tcp", tcp.Addr)
 
 	if err != nil {
-		return false, err
+		return err
 	}
+
+	defer tcpln.Close()
 
 	for {
-		conn, err := tcpln.Accept()
-		defer conn.Close()
-		if err != nil {
-			return false, err
-		}
-		fmt.Printf("Received from: %v ", conn.RemoteAddr())
-	}
 
+		conn, err := tcpln.Accept()
+		if err != nil {
+			continue
+		}
+		go handler(conn)
+	}
 }
