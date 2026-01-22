@@ -1,9 +1,12 @@
 package main
 
 import (
+	"GoTTP/connection"
+	"GoTTP/http"
 	"GoTTP/transport"
+	"GoTTP/worker"
+	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"net"
 )
@@ -16,57 +19,24 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	wp := worker.NewWorkerPool(4) // 4 worker goroutines
+
 	err1 := tcpListener.Start(func(conn net.Conn) {
 		defer conn.Close()
-		fmt.Println("Accepted from", conn.RemoteAddr())
-
-		buf := make([]byte, 64)
-		readPos := 0
-		writePos := 0
-
+		reader := bufio.NewReader(conn)
 		for {
-
-			if writePos == len(buf) {
-				if readPos > 0 {
-					copy(buf, buf[readPos:writePos])
-					writePos -= readPos
-					readPos = 0
-				} else {
-					newBuf := make([]byte, len(buf)*2)
-					copy(newBuf, buf)
-					buf = newBuf
-				}
-			}
-			n, err := conn.Read(buf[writePos:])
-
+			req, err := connection.ReadAndParseRequest(reader)
 			if err != nil {
-				if err == io.EOF {
-					fmt.Println("client closed connection:", conn.RemoteAddr())
-					return
-				}
-				log.Println("read error:", err)
 				return
 			}
 
-			writePos += n
-			for {
-				msgEnd := FindMessageEnd(buf[readPos:writePos])
-				fmt.Println("Message Size :", msgEnd)
-				fmt.Println("Buffer Appended String :", string(buf))
-				fmt.Println("Value of write ", writePos)
-				if msgEnd < 0 {
-					break
-				}
-				msg := buf[readPos : readPos+msgEnd]
-				fmt.Printf("Received message from %s: %q\n", conn.RemoteAddr(), string(msg))
-				readPos += msgEnd
-			}
+			respCh := make(chan *http.Response, 1)
+			wp.JobQueue <- &worker.Job{Req: req, RespCh: respCh}
 
-			if readPos > 0 {
-				copy(buf, buf[readPos:writePos])
-				writePos -= readPos
-				readPos = 0
-			}
+			resp := <-respCh
+
+			handleRequest(conn, resp)
 		}
 	})
 
@@ -75,11 +45,6 @@ func main() {
 	}
 }
 
-func FindMessageEnd(buf []byte) int {
-	for i := 0; i < len(buf)-3; i++ {
-		if buf[i] == '\r' && buf[i+1] == '\n' && buf[i+2] == '\r' && buf[i+3] == '\n' {
-			return i + 4
-		}
-	}
-	return -1
+func handleRequest(conn net.Conn, res *http.Response) {
+	fmt.Printf("Connection id %v %d", conn, res.Body)
 }

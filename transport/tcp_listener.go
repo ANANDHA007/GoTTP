@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"log"
 	"net"
 )
 
@@ -32,6 +33,7 @@ func (tcp *TcpListner) Start(handler func(net.Conn)) error {
 		if err != nil {
 			continue
 		}
+		log.Println("Connection established with connection instance : ", conn)
 		go handler(conn)
 	}
 }
