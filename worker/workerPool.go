@@ -1,13 +1,14 @@
 package worker
 
 import (
-	"GoTTP/http"
-	"strconv"
+	"GoTTP/context"
+	"GoTTP/handler"
 )
 
 type Job struct {
-	Req    *http.Request
-	RespCh chan *http.Response
+	Handler handler.HandlerFunc
+	Context *context.Context
+	Done    chan struct{}
 }
 
 // WorkerPool manages worker goroutines
@@ -22,31 +23,26 @@ func NewWorkerPool(maxWorkers int) *WorkerPool {
 	}
 
 	for i := 0; i < maxWorkers; i++ {
-		go pool.worker(i)
+		go pool.worker()
 	}
 
 	return pool
 }
 
 // worker goroutine: waits for jobs
-func (wp *WorkerPool) worker(id int) {
+func (wp *WorkerPool) worker() {
 	for job := range wp.JobQueue {
-		resp := handleRequest(job.Req)
-		job.RespCh <- resp
+		job.Handler(job.Context)
+		close(job.Done)
 	}
 }
 
-// Example request handler logic
-func handleRequest(req *http.Request) *http.Response {
-	body := []byte("Hello from Worker Pool for " + req.Path)
-
-	resp := &http.Response{
-		Status: "200 OK",
-		Headers: map[string]string{
-			"Content-Length": strconv.Itoa(len(body)),
-			"Connection":     "keep-alive",
-		},
-		Body: body,
+func (wp *WorkerPool) Submit(h handler.HandlerFunc, ctx *context.Context) {
+	done := make(chan struct{})
+	wp.JobQueue <- &Job{
+		Handler: h,
+		Context: ctx,
+		Done:    done,
 	}
-	return resp
+	<-done
 }
